@@ -1,6 +1,6 @@
 // Configuration
 var serverPort = 8080;
-var serverIP = "127.0.0.1";
+var serverIP = "0.0.0.0";
 
 var http = require("http");
 var qs = require("querystring");
@@ -117,30 +117,43 @@ function validateReport(report){
 function handleReport(report){
 	console.log(report);
 	db.serialize(function(){
-		var stmt = db.prepare("SELECT id FROM players WHERE 'steamid' == ?");
+		var stmt = db.prepare("SELECT id FROM players WHERE `steamid` == ?");
 		var playerid; // Row id for player.
 		var error = false;
+		console.log("Looking for steamid: " + report.steamid);
 		stmt.get(report.steamid, function (err, row){
 			if (row){
-				console.log(row);
+				console.log("Player found.");
+				console.log("row: " + row);
 				playerid = row.id;
+				addReport(playerid, report);
 			} else {
+				console.log(err);
 				// Not in database, so add them to the table.
-				stmt = db.prepare("INSERT INTO players (steamid) VALUES (?)");
-				stmt.run(report.steamid, function(err2){
+				stmt = db.prepare("INSERT INTO players (steamid, name) VALUES (?, ?)");
+				stmt.run(report.steamid, report.name, function(err2){
 					if (err2){
+						console.log("Couldn't add user to the server.");
+						console.log(err2);
 						error = true;
 					} else {
+						console.log("New player added to the server. Steamid: " + report.steamid);
 						playerid = this.lastID;
+						addReport(playerid, report);
 					}
 				});
 			}
 		});
-		// At this point, either error is true or id is the key we want.
-		if (!error){
-			stmt = db.prepare("INSERT INTO reports (playerid, round, ability, time) VALUES (?, ?, ?, ?)");
-			//TODO Maybe a check to see if this worked?
-			stmt.run(playerid, report.round, report.ability, report.time);
-		}
+	});
+}
+
+function addReport(playerid, report){
+	console.log("Player id is: " + playerid);
+	// At this point, either error is true or id is the key we want.
+	stmt = db.prepare("INSERT INTO reports (playerid, round, ability, time) VALUES (?, ?, ?, ?)");
+	//TODO Maybe a check to see if this worked?
+	stmt.run(playerid, report.round, report.ability, report.time, function(err2){
+		console.log("Error: " + err2);
+	console.log(this);
 	});
 }
