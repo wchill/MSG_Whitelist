@@ -50,7 +50,7 @@ function reqHandler(request, response) {
 	console.log("Connection detected.");
 	console.log(request.headers);
 	response.setHeader("Access-Control-Allow-Origin", "*");
-	var parsedUrl = url.parse(request.url);
+	var parsedUrl = url.parse(request.url, true);
 
 	if (request.method === "POST" && parsedUrl.pathname === "/report"){
 		var requestData = "";
@@ -87,10 +87,20 @@ function reqHandler(request, response) {
 		});
 
 		// TODO Other headers?
-	} else if (request.method == 'OPTIONS'){
+	} else if (request.method == "OPTIONS"){
 		response.setHeader("Access-Control-Allow-Origin", "*");
 		response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
 		response.end();
+	} else if (request.method == "GET" && parsedUrl.pathname == "/player" ) {
+		console.log(parsedUrl);
+		var steamid = parseInt(parsedUrl.query.steamid);
+		if (!steamid){
+			console.log("invalid query" + parsedUrl.query.id + (typeof parsedUrl.query.id));
+			response.statusCode = 400;
+			response.end();
+			return;
+		}
+		var reports = getReports(steamid, response);
 	} else {
 		response.setHeader("Content-Type", "application/json");
 		var status = { "status": "success"};
@@ -100,6 +110,39 @@ function reqHandler(request, response) {
 		response.write(JSON.stringify(status));
 		response.end();
 	}
+}
+
+function getReports(steamid, response){
+	console.log("Getting reports for steamid" + steamid);
+	if(!steamid){
+		return null;
+	}
+	var stmt = db.prepare("SELECT * FROM players WHERE `steamid` == ?");
+	var playerid; // Row id for player.
+	stmt.get(steamid, function(err, row){
+		if (err){
+			console.log("Err"+ err);
+			return null;
+		} else {
+			var playerid = row.id;
+			console.log(playerid);
+			stmt = db.prepare("SELECT round, ability, time FROM reports WHERE `playerid` == ?");
+			stmt.all(playerid, function(er, rows){
+				if (er) {
+					return null;
+				} else {
+					console.log(row.length);
+					response.setHeader("Access-Control-Allow-Origin", "*");
+					response.setHeader("Content-Type", "application/json");
+					var data = {"steamid": steamid, "reportcount": rows.length, "reports":rows};
+					console.log(data);
+					response.write(JSON.stringify(data));
+					response.end();
+				}
+			});
+		}
+	});
+	
 }
 
 // TODO Properly validate incoming data.
@@ -153,7 +196,7 @@ function addReport(playerid, report){
 	stmt = db.prepare("INSERT INTO reports (playerid, round, ability, time) VALUES (?, ?, ?, ?)");
 	//TODO Maybe a check to see if this worked?
 	stmt.run(playerid, report.round, report.ability, report.time, function(err2){
-		console.log("Error: " + err2);
+	console.log("Error: " + err2);
 	console.log(this);
 	});
 }
